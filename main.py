@@ -157,7 +157,7 @@ while True:
 
     # First iteration of stream processing
     if bg is None:
-        # April Tag cropping
+        # April Tag cropping functions from Luca Pezzarossa
         # Creating a detector option object and creating a detector
         tag_detector_options = DetectorOptions(
             families="tag16h5",
