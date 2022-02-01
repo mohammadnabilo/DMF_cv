@@ -277,6 +277,3 @@ while True:
 pixels.fill((0,0,0,0))
 #cap.release()
 cv2.destroyAllWindows()
-
-
-
