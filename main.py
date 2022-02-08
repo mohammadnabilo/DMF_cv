@@ -3,8 +3,9 @@ import math
 import time
 import numpy as np
 import configparser
-import json
 from utils.apriltag import Detector, DetectorOptions
+from utils.api import API
+from classes.drop import Drop
 
 # Initialize
 config = configparser.ConfigParser()
@@ -33,26 +34,6 @@ print(f"{bcolors.WARNING}2..{bcolors.ENDC}")
 time.sleep(0.1)
 print(f"{bcolors.WARNING}1.. {bcolors.ENDC}")
 time.sleep(0.2)
-
-
-# Drop object class
-class Drop:
-    def __init__(self, center, radius, color, circularity):
-        self.center = center
-        self.radius = radius
-        self.color = color
-        self.circularity = circularity
-        self.history = []
-        self.acc = 0
-
-    def __repr__(self):
-        return ("( center = " + str(self.center) + ", radius = " + str(self.radius) + ", average color = "+str(self.color)+", circularity = "+str(round(self.circularity,3))+", length of history = "+str(len(self.history))+", accuracy = "+str((self.acc))+" ) ")
-
-    def __str__(self):
-        return ("( center = " + str(self.center) + ", radius = " + str(self.radius) + ", average color = "+str(self.color)+", circularity = "+str(round(self.circularity,3))+", length of history = "+str(len(self.history))+", accuracy = "+str((self.acc))+" ) ")
-
-    def dump(self):
-        return ("( center = " + str(self.center) + ", radius = " + str(self.radius) + ", average color = "+str(self.color)+", circularity = "+str(round(self.circularity,3))+", length of history = "+str(len(self.history))+", accuracy = "+str((self.acc))+" ) ")
 
 
 drops = []
@@ -99,41 +80,6 @@ def color(center, radius):
     # Average of central pixels in the horizontal and vertical axis
     rgb = [int(sum(r) / len(r)), int(sum(g) / len(g)), int(sum(b) / len(b))]
     return rgb
-
-
-# API takes an argument and returns data in json format
-def API(str=None):
-    # Creates list for data
-    coor = []
-    radius = []
-    col = []
-    circ = []
-    his = []
-    acc = []
-    for droplet in drops:
-        coor.append(droplet.center)
-        radius.append(droplet.radius)
-        col.append(droplet.color)
-        circ.append(droplet.circularity)
-        his.append(droplet.history)
-        acc.append(droplet.acc)
-    if str is None or str == "all":
-        jayson = json.dumps([drop.dump() for drop in drops])
-        return jayson
-    elif str == "coordinates":
-        return json.dumps(coor)
-    elif str == "radius":
-        return json.dumps(radius)
-    elif str == "color":
-        return json.dumps(color)
-    elif str == "circularity":
-        return json.dumps(circ)
-    elif str == "history":
-        return json.dumps(his)
-    elif str == "accuracy":
-        return json.dumps(acc)
-    else:
-        return "Error: argument not valid"
 
 
 # Iterate over every frame
@@ -214,7 +160,7 @@ while True:
         circularity = circumference ** 2 / (4 * math.pi * (radius * math.pi ** 2))
         contour = cv2.convexHull(contour)
         if int(config['DEFAULT']['droplet_radius_max']) > radius > int(config['DEFAULT']['droplet_radius_min']) and circularity < int(config['DEFAULT']['circularity_min']):
-            # col = color(center,radius)
+            # col = color(center, radius)
             drop = Drop(electrode_center, radius, 1, circularity)
             curDroplets += 1
             addDrop(drop)
