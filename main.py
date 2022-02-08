@@ -4,12 +4,7 @@ import time
 import numpy as np
 import configparser
 import json
-import resource
-from apriltag import Detector, DetectorOptions
-import board
-import neopixel
-import picamera
-import io
+from utils.apriltag import Detector, DetectorOptions
 
 # Initialize
 config = configparser.ConfigParser()
@@ -19,22 +14,16 @@ bg = None
 fpslist = []
 dropThres = float(config['DEFAULT']['droplet_threshold'])
 numDroplets = 0
-pixels = neopixel.NeoPixel(board.D18, 24, pixel_order=neopixel.RGBW)
-
-# Start stream
-stream = io.BytesIO()
-with picamera.PiCamera() as camera:
-    time.sleep(2)
-    camera.capture(stream, format='jpeg')
-data = np.fromstring(stream.getvalue(), dtype=np.uint8)
 
 # If recorded video:
-#cap = cv2.VideoCapture('data_38.h264')
+cap = cv2.VideoCapture('videos/open/data_38.h264')
+
 
 class bcolors:
     HEADER = '\033[95m'
     WARNING = '\u001b[32m'
     ENDC = '\033[0m'
+
 
 print(f"{bcolors.WARNING}Starting digital microfluidics computer vision algorithm {bcolors.ENDC}")
 time.sleep(0.3)
@@ -68,6 +57,7 @@ class Drop:
 
 drops = []
 
+
 # Function to add droplets into droplet list
 def addDrop(drop):
     exist = True
@@ -76,7 +66,7 @@ def addDrop(drop):
         drops.append(drop)
     # Compare already detected droplets to new droplet
     for droplet in drops:
-        if np.linalg.norm(np.subtract(droplet.center,drop.center)) < 3:
+        if np.linalg.norm(np.subtract(droplet.center, drop.center)) < 3:
             droplet.center = drop.center
             droplet.radius = drop.radius
             droplet.history.append(center)
@@ -88,15 +78,16 @@ def addDrop(drop):
     if not(exist):
         drops.append(drop)
 
+
 # Function to calculate color of droplet
-def color(center,radius):
+def color(center, radius):
     list = []
     r = []
     g = []
     b = []
     x0 = center[0]
     y0 = center[1]
-    for i in range(0,radius,2):
+    for i in range(0, radius, 2):
         list.append(frame[x0 + i, y0].tolist())
         list.append(frame[x0 - i, y0].tolist())
         list.append(frame[x0, y0 + i].tolist())
@@ -108,6 +99,7 @@ def color(center,radius):
     # Average of central pixels in the horizontal and vertical axis
     rgb = [int(sum(r) / len(r)), int(sum(g) / len(g)), int(sum(b) / len(b))]
     return rgb
+
 
 # API takes an argument and returns data in json format
 def API(str=None):
@@ -125,7 +117,7 @@ def API(str=None):
         circ.append(droplet.circularity)
         his.append(droplet.history)
         acc.append(droplet.acc)
-    if str == None or str == "all":
+    if str is None or str == "all":
         jayson = json.dumps([drop.dump() for drop in drops])
         return jayson
     elif str == "coordinates":
@@ -143,15 +135,11 @@ def API(str=None):
     else:
         return "Error: argument not valid"
 
-# Turn on LED ring
-for i in range(0,24,int(config['DEFAULT']['turn_on_every'])):
-    pixels[i]= (int(config['DEFAULT']['R']),int(config['DEFAULT']['G']),int(config['DEFAULT']['B']),int(config['DEFAULT']['W']))
 
 # Iterate over every frame
 while True:
     curDroplets = 0
-    frame = cv2.imdecode(data, 1)
-    # ret, frame = cap.read()
+    ret, frame = cap.read()
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (int(config['DEFAULT']['Gaussian_blur_kernel']), int(config['DEFAULT']['Gaussian_blur_kernel'])), 0)
 
@@ -162,7 +150,7 @@ while True:
         tag_detector_options = DetectorOptions(
             families="tag16h5",
             border=int(config['DEFAULT']['border']),
-            nthreads=int(config['DEFAULT']['threads']),
+            nthreads=int(config['DEFAULT']['nthreads']),
             quad_decimate=float(config['DEFAULT']['quad_decimate']),
             quad_blur=float(config['DEFAULT']['quad_blur']),
             refine_edges=True,
@@ -175,39 +163,39 @@ while True:
         detections, dimg = det.detect(gray, return_image=True)
 
         # If less than 4 April tags detected program terminates
-        if len(detection) < 4:
-            print("  Detected less than 3 apriltags. Terminating.")
-            break
+        # if len(detections) < 4:
+        #     print("  Detected less than 3 apriltags. Terminating.")
+        #     break
 
-        # Selecting the 4 apriltags candidates in the corners
-        selected_detections = []
-        for i, detection in enumerate(detections):
-            decision_margin = detection.decision_margin
-            if decision_margin >= config.minimum_decision_margin:
-                selected_detections.append(detection)
-
-        # If less than 4 April tags is selected program terminates
-        if len(selected_detections) < 4:
-            print("  Selected less than 4 apriltags. Terminating.")
-            break
-
-        # Find corners to crop frame
-        for tag in selected_detections:
-            if tag.tag_id == 0:
-                x_crop1 = int(tag.center[0]+12)
-                y_crop1 = int(tag.center[1]+12)
-            if tag.tag_id == 4:
-                x_crop2 = int(tag.center[0] - 12)
-                y_crop2 = int(tag.center[1] - 12)
-
-        gray = frame[y_crop1:y_crop2, x_crop1:x_crop1]
+        # # Selecting the 4 apriltags candidates in the corners
+        # selected_detections = []
+        # for i, detection in enumerate(detections):
+        #     decision_margin = detection.decision_margin
+        #     if decision_margin >= config.minimum_decision_margin:
+        #         selected_detections.append(detection)
+        #
+        # # If less than 4 April tags is selected program terminates
+        # if len(selected_detections) < 4:
+        #     print("  Selected less than 4 apriltags. Terminating.")
+        #     break
+        #
+        # # Find corners to crop frame
+        # for tag in selected_detections:
+        #     if tag.tag_id == 0:
+        #         x_crop1 = int(tag.center[0]+12)
+        #         y_crop1 = int(tag.center[1]+12)
+        #     if tag.tag_id == 4:
+        #         x_crop2 = int(tag.center[0] - 12)
+        #         y_crop2 = int(tag.center[1] - 12)
+        #
+        # gray = frame[y_crop1:y_crop2, x_crop1:x_crop1]
 
         # Reference frame for movement detection
         bg = gray
         continue
 
     # Cropping each frame
-    gray = frame[y_crop1:y_crop2, x_crop1:x_crop2]
+    # gray = frame[y_crop1:y_crop2, x_crop1:x_crop2]
 
     # Movement detection
     diff_frame = cv2.absdiff(bg, gray)
@@ -219,21 +207,21 @@ while True:
     for contour in cnts:
         motion = 1
         (x, y), radius = cv2.minEnclosingCircle(contour)
-        center = (int(x),int(y))
+        center = (int(x), int(y))
         electrode_center = (int(round((int(x)-36)/8)), int(round((int(y)-8)/8)))
         radius = int(radius)
         circumference = cv2.arcLength(contour, True)
         circularity = circumference ** 2 / (4 * math.pi * (radius * math.pi ** 2))
         contour = cv2.convexHull(contour)
         if int(config['DEFAULT']['droplet_radius_max']) > radius > int(config['DEFAULT']['droplet_radius_min']) and circularity < int(config['DEFAULT']['circularity_min']):
-            col = color(center,radius)
-            drop = Drop(electrode_center, radius, col, circularity)
+            # col = color(center,radius)
+            drop = Drop(electrode_center, radius, 1, circularity)
             curDroplets += 1
             addDrop(drop)
             # Visualisation by creating a green circle around droplet and text showing accuracy of the droplet
             cv2.circle(thresh_frame, center, radius, (0, 255, 0), 2)
             for drop in drops:
-                if drop.acc>dropThres:
+                if drop.acc > dropThres:
                     numDroplets += 1
                 if center == drop.center:
                     cv2.putText(frame, str(round(drop.acc, 3)), (center[0], center[1] + (radius * 2)),
@@ -270,10 +258,9 @@ while True:
     print(sum(fpslist)/len(fpslist))
     print(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
     """
-    if int(config['DEFAULT']['show_result'])==1:
+    if int(config['DEFAULT']['show_result']) == 1:
         cv2.imshow("Droplets Frame", frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
-pixels.fill((0,0,0,0))
-#cap.release()
+cap.release()
 cv2.destroyAllWindows()
