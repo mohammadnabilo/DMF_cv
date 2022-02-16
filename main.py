@@ -16,9 +16,10 @@ fpslist = []
 dropThres = float(config['DEFAULT']['droplet_threshold'])
 numDroplets = 0
 
-# If recorded video:
+# If recorded video open:
 cap = cv2.VideoCapture('videos/open/data_38.h264')
-
+# If recorded video closed:
+# cap = cv2.VideoCapture('videos/closed/video_samples/data_14.h264')
 
 class bcolors:
     HEADER = '\033[95m'
@@ -88,11 +89,14 @@ while True:
     ret, frame = cap.read()
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (int(config['DEFAULT']['Gaussian_blur_kernel']), int(config['DEFAULT']['Gaussian_blur_kernel'])), 0)
-
+    april = False
     # First iteration of stream processing
-    if bg is None:
+    # if bg is None:
+    if bg is None and april:
+        cv2.imshow("Droplets Frame", gray)
         # April Tag cropping functions from Luca Pezzarossa
         # Creating a detector option object and creating a detector
+        """
         tag_detector_options = DetectorOptions(
             families="tag16h5",
             border=int(config['DEFAULT']['border']),
@@ -104,42 +108,55 @@ while True:
             refine_pose=True,
             debug=False,
             quad_contours=True)
+        """
+        tag_detector_options = DetectorOptions("tag16h5")
         det = Detector(tag_detector_options, searchpath=["./apriltag/build/lib"])
 
         detections, dimg = det.detect(gray, return_image=True)
 
         # If less than 4 April tags detected program terminates
-        # if len(detections) < 4:
-        #     print("  Detected less than 3 apriltags. Terminating.")
-        #     break
+        if len(detections) < 4:
+            print("  Detected less than 3 apriltags. Terminating.")
+            continue
 
-        # # Selecting the 4 apriltags candidates in the corners
-        # selected_detections = []
-        # for i, detection in enumerate(detections):
-        #     decision_margin = detection.decision_margin
-        #     if decision_margin >= config.minimum_decision_margin:
-        #         selected_detections.append(detection)
-        #
-        # # If less than 4 April tags is selected program terminates
-        # if len(selected_detections) < 4:
-        #     print("  Selected less than 4 apriltags. Terminating.")
-        #     break
-        #
-        # # Find corners to crop frame
-        # for tag in selected_detections:
-        #     if tag.tag_id == 0:
-        #         x_crop1 = int(tag.center[0]+12)
-        #         y_crop1 = int(tag.center[1]+12)
-        #     if tag.tag_id == 4:
-        #         x_crop2 = int(tag.center[0] - 12)
-        #         y_crop2 = int(tag.center[1] - 12)
-        #
-        # gray = frame[y_crop1:y_crop2, x_crop1:x_crop1]
+        # Selecting the 4 apriltags candidates in the corners
+        selected_detections = []
+        for i, detection in enumerate(detections):
+            decision_margin = detection.decision_margin
+            if decision_margin >= config.minimum_decision_margin:
+                selected_detections.append(detection)
+
+        # If less than 4 April tags is selected program terminates
+        if len(selected_detections) < 4:
+            print("  Selected less than 4 apriltags. Terminating.")
+            break
+
+        # Find corners to crop frame
+        for tag in selected_detections:
+            if tag.tag_id == 0:
+                x_crop1 = int(tag.center[0]+12)
+                y_crop1 = int(tag.center[1]+12)
+            if tag.tag_id == 4:
+                x_crop2 = int(tag.center[0] - 12)
+                y_crop2 = int(tag.center[1] - 12)
+
+        gray = frame[y_crop1:y_crop2, x_crop1:x_crop1]
 
         # Reference frame for movement detection
         bg = gray
         continue
+    if bg is None and not april:
+        x1 = 200
+        x2 = 400
+        y1 = 80
+        y2 = 400
+        # gray2 = cv2.rectangle(gray, (x1,y1), (x2,y2), (0,0,0), -1)
+        # cv2.imshow("Droplets Frame", gray2)
+        # cv2.imwrite("rectframe.jpg", gray2)
+        bg = gray[y1:y2, x1:x2]
+        cv2.imwrite("rectframe2.jpg", bg)
 
+    gray = gray[y1:y2, x1:x2]
     # Cropping each frame
     # gray = frame[y_crop1:y_crop2, x_crop1:x_crop2]
 
@@ -153,7 +170,7 @@ while True:
     for contour in cnts:
         motion = 1
         (x, y), radius = cv2.minEnclosingCircle(contour)
-        center = (int(x), int(y))
+        center = (int(x)+x1, int(y)+y1)
         electrode_center = (int(round((int(x)-36)/8)), int(round((int(y)-8)/8)))
         radius = int(radius)
         circumference = cv2.arcLength(contour, True)
@@ -165,7 +182,8 @@ while True:
             curDroplets += 1
             addDrop(drop)
             # Visualisation by creating a green circle around droplet and text showing accuracy of the droplet
-            cv2.circle(thresh_frame, center, radius, (0, 255, 0), 2)
+            # cv2.circle(thresh_frame, center, radius, (0, 255, 0), 2)
+            cv2.circle(frame, center, radius, (0, 255, 0), 2)
             for drop in drops:
                 if drop.acc > dropThres:
                     numDroplets += 1
@@ -182,7 +200,11 @@ while True:
                                             cv2.HOUGH_GRADIENT, 1, 20, param1=int(config['DEFAULT']['circle_edge_param1']),
                                             param2=int(config['DEFAULT']['circle_edge_param2']), minRadius=int(config['DEFAULT']['droplet_radius_min']), maxRadius=int(config['DEFAULT']['droplet_radius_max']))
 
+        if not detected_circles:
+            continue
         # Convert the circle parameters a, b and r to integers.
+        print(detected_circles)
+        print(type(detected_circles))
         detected_circles = np.uint16(np.around(detected_circles))
         # Loop over each detected circle
         for dat in detected_circles[0, :]:
@@ -192,7 +214,7 @@ while True:
             electrode_center = (int(round((int(a) - 36) / 8)), int(round((int(b) - 8) / 8)))
             drop = Drop(electrode_center, radius, col, circularity)
             # Draw the circumference of the circle.
-            cv2.circle(frame, (a, b), radius, (0, 255, 0), 2)
+            cv2.circle(frame, (a+x1, b+y1), radius, (0, 255, 0), 2)
 
     print(drops)
     """
